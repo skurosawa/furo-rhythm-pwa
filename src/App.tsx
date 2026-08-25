@@ -14,41 +14,22 @@ import {
 import { loadBathEvents, appendBathEvent } from './lib/bathHistory'
 import { copyText, tryNativeShare } from './lib/share'
 import { loadState, saveState, type AppState } from './lib/storage'
-import { computeBathResult } from './domain/computeBathResult'
+import { computeBathResult } from './domain/bath'
+
+import {
+  dayIndexFromDayKey,
+  dayKeyFromDayIndex,
+  getTodayKeyJST,
+  labelFromDayKey,
+} from './domain/dateKey'
 
 /* ---------- UI Components ---------- */
 
 import ShareButton from './components/ShareButton'
 
-/* ---------- Date Helpers（将来 domain/dateKey.ts に移動可） ---------- */
+/* ---------- Browser Helpers ---------- */
 
 const nowMs = () => Date.now()
-
-const getTodayKeyJST = () =>
-  new Date().toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })
-
-const parseDayKey = (key: string) => {
-  const parts = key.split(/[^\d]+/).filter(Boolean).map(Number)
-  if (parts.length < 3) return null
-  const [y, m, d] = parts
-  return { y, m, d }
-}
-
-const dayIndexFromDayKey = (key: string) => {
-  const p = parseDayKey(key)
-  if (!p) return null
-  return Math.floor(Date.UTC(p.y, p.m - 1, p.d) / 86400000)
-}
-
-const dayKeyFromDayIndex = (idx: number) => {
-  const d = new Date(idx * 86400000)
-  return `${d.getUTCFullYear()}/${d.getUTCMonth() + 1}/${d.getUTCDate()}`
-}
-
-const labelFromDayKey = (key: string) => {
-  const p = parseDayKey(key)
-  return p ? `${p.m}/${p.d}` : key
-}
 
 /* ===================================================== */
 
@@ -59,15 +40,45 @@ export default function App() {
   const [point, setPoint] = useState(0)
   const [bathFx, setBathFx] = useState(false)
 
-  const { currentCleanStreak, bestCleanStreak, lastResetAt, lastBathDay } = appState
+  const {
+    currentCleanStreak,
+    bestCleanStreak,
+    lastResetAt,
+    lastBathDay,
+  } = appState
 
   /* ---------- 清潔ランク ---------- */
 
   const cleanTier = useMemo(() => {
-    if (currentCleanStreak >= 30) return { key: 'legend', label: '伝説清潔', badge: '👑' }
-    if (currentCleanStreak >= 14) return { key: 'super', label: '超神清潔', badge: '💖' }
-    if (currentCleanStreak >= 7) return { key: 'god', label: '神清潔', badge: '✨' }
-    return { key: 'none', label: '', badge: '' }
+    if (currentCleanStreak >= 30) {
+      return {
+        key: 'legend',
+        label: '伝説清潔',
+        badge: '👑',
+      }
+    }
+
+    if (currentCleanStreak >= 14) {
+      return {
+        key: 'super',
+        label: '超神清潔',
+        badge: '💖',
+      }
+    }
+
+    if (currentCleanStreak >= 7) {
+      return {
+        key: 'god',
+        label: '神清潔',
+        badge: '✨',
+      }
+    }
+
+    return {
+      key: 'none',
+      label: '',
+      badge: '',
+    }
   }, [currentCleanStreak])
 
   const isGodClean = cleanTier.key !== 'none'
@@ -82,9 +93,11 @@ export default function App() {
     }
 
     tick()
+
     const id = setInterval(tick, 60000)
 
     const onVis = () => !document.hidden && tick()
+
     window.addEventListener('focus', tick)
     window.addEventListener('pageshow', tick)
     document.addEventListener('visibilitychange', onVis)
@@ -100,8 +113,14 @@ export default function App() {
   /* ---------- 危険度 ---------- */
 
   const dangerPercent = getDangerPercent(point)
-  const dangerLevel = useMemo(() => getDangerLevel(point), [point])
-  const dangerComment = useMemo(() => getDangerComment(point), [point])
+  const dangerLevel = useMemo(
+    () => getDangerLevel(point),
+    [point],
+  )
+  const dangerComment = useMemo(
+    () => getDangerComment(point),
+    [point],
+  )
   const isDanger = point >= 48
 
   /* ---------- 入浴ボタン ---------- */
@@ -123,7 +142,11 @@ export default function App() {
     })
 
     if (result.shouldRecordHistory) {
-      appendBathEvent({ ts: t, dayKey: todayKey, pointBefore: point })
+      appendBathEvent({
+        ts: t,
+        dayKey: todayKey,
+        pointBefore: point,
+      })
     }
 
     const next: AppState = {
@@ -147,13 +170,17 @@ export default function App() {
         : `${currentCleanStreak}日連続`
 
     const sparkle = isGodClean ? ' ✨' : ''
+
     return `🛁 おふろ入った〜 🫧 ${streakText}${sparkle}\n#ふろリズム`
   }
 
   const onShare = async () => {
     const text = buildShareText()
     const shared = await tryNativeShare({ text })
-    if (!shared) await copyText(text)
+
+    if (!shared) {
+      await copyText(text)
+    }
   }
 
   /* ---------- 履歴 ---------- */
@@ -163,16 +190,23 @@ export default function App() {
     const countByDayKey = new Map<string, number>()
 
     for (const e of events) {
-      countByDayKey.set(e.dayKey, (countByDayKey.get(e.dayKey) ?? 0) + 1)
+      countByDayKey.set(
+        e.dayKey,
+        (countByDayKey.get(e.dayKey) ?? 0) + 1,
+      )
     }
 
     const todayKey = getTodayKeyJST()
     const todayIdx = dayIndexFromDayKey(todayKey)
 
     const days = []
+
     for (let i = historyRange - 1; i >= 0; i--) {
       const key =
-        todayIdx === null ? todayKey : dayKeyFromDayIndex(todayIdx - i)
+        todayIdx === null
+          ? todayKey
+          : dayKeyFromDayIndex(todayIdx - i)
+
       days.push({
         key,
         label: labelFromDayKey(key),
@@ -180,12 +214,24 @@ export default function App() {
       })
     }
 
-    const max = Math.max(1, ...days.map((d) => d.count))
+    const max = Math.max(
+      1,
+      ...days.map((d) => d.count),
+    )
+
     const maxHeight = 72
 
     const items = days.map((d) => ({
       ...d,
-      height: d.count === 0 ? 0 : Math.max(10, Math.round((d.count / max) * maxHeight)),
+      height:
+        d.count === 0
+          ? 0
+          : Math.max(
+              10,
+              Math.round(
+                (d.count / max) * maxHeight,
+              ),
+            ),
     }))
 
     return { items }
@@ -197,9 +243,14 @@ export default function App() {
     <div className={`app ${isDanger ? 'dangerMode' : ''}`}>
       <header className="top">
         <div className="brand">
-          <h1 className="brandTitle">ふろリズム</h1>
+          <h1 className="brandTitle">
+            ふろリズム
+          </h1>
+
           {isGodClean && (
-            <span className={`godBadge godBadge--${cleanTier.key}`}>
+            <span
+              className={`godBadge godBadge--${cleanTier.key}`}
+            >
               {cleanTier.badge} {cleanTier.label}
             </span>
           )}
@@ -208,23 +259,40 @@ export default function App() {
 
       <main className="stage">
         {/* ---------- Hero ---------- */}
+
         <section className="hero">
           <div className="heroNumber">
-            <span className="heroValue">{currentCleanStreak}</span>
-            <span className="heroUnit">日連続</span>
+            <span className="heroValue">
+              {currentCleanStreak}
+            </span>
+
+            <span className="heroUnit">
+              日連続
+            </span>
           </div>
 
           <div className="gaugeWrap">
-            <div className={`gauge ${dangerLevel}`}>
-              <div className="gaugeFill" style={{ width: `${dangerPercent}%` }} />
+            <div
+              className={`gauge ${dangerLevel}`}
+            >
+              <div
+                className="gaugeFill"
+                style={{
+                  width: `${dangerPercent}%`,
+                }}
+              />
             </div>
-            <div className={`dangerBadge dangerBadge--${dangerLevel}`}>
+
+            <div
+              className={`dangerBadge dangerBadge--${dangerLevel}`}
+            >
               {dangerComment}
             </div>
           </div>
         </section>
 
         {/* ---------- CTA ---------- */}
+
         <div className="cta">
           <button
             className={`bathCta ${bathFx ? 'bathFx' : ''}`}
@@ -235,23 +303,36 @@ export default function App() {
         </div>
 
         {/* ---------- History ---------- */}
+
         <section className="historyPanel">
           <div className="panelHeader">
-            <h2 className="panelTitle">履歴</h2>
+            <h2 className="panelTitle">
+              履歴
+            </h2>
 
-            {/* ★ SVG共有ボタン */}
             <ShareButton onClick={onShare} />
           </div>
 
           <div className="historyBars">
             {historyData.items.map((d) => (
-              <div key={d.key} className="historyItem">
+              <div
+                key={d.key}
+                className="historyItem"
+              >
                 {d.height > 0 ? (
-                  <div className="historyBar" style={{ height: `${d.height}px` }} />
+                  <div
+                    className="historyBar"
+                    style={{
+                      height: `${d.height}px`,
+                    }}
+                  />
                 ) : (
                   <div className="historyDot" />
                 )}
-                <span className="historyDay">{d.label}</span>
+
+                <span className="historyDay">
+                  {d.label}
+                </span>
               </div>
             ))}
           </div>
