@@ -17,11 +17,10 @@ import { loadState, saveState, type AppState } from './lib/storage'
 import { computeBathResult } from './domain/bath'
 
 import {
-  dayIndexFromDayKey,
-  dayKeyFromDayIndex,
   getTodayKeyJST,
-  labelFromDayKey,
 } from './domain/dateKey'
+
+import { buildHistoryData } from './domain/history'
 
 /* ---------- UI Components ---------- */
 
@@ -113,14 +112,17 @@ export default function App() {
   /* ---------- 危険度 ---------- */
 
   const dangerPercent = getDangerPercent(point)
+
   const dangerLevel = useMemo(
     () => getDangerLevel(point),
     [point],
   )
+
   const dangerComment = useMemo(
     () => getDangerComment(point),
     [point],
   )
+
   const isDanger = point >= 48
 
   /* ---------- 入浴ボタン ---------- */
@@ -187,54 +189,13 @@ export default function App() {
 
   const historyData = useMemo(() => {
     const events = loadBathEvents()
-    const countByDayKey = new Map<string, number>()
-
-    for (const e of events) {
-      countByDayKey.set(
-        e.dayKey,
-        (countByDayKey.get(e.dayKey) ?? 0) + 1,
-      )
-    }
-
     const todayKey = getTodayKeyJST()
-    const todayIdx = dayIndexFromDayKey(todayKey)
 
-    const days = []
-
-    for (let i = historyRange - 1; i >= 0; i--) {
-      const key =
-        todayIdx === null
-          ? todayKey
-          : dayKeyFromDayIndex(todayIdx - i)
-
-      days.push({
-        key,
-        label: labelFromDayKey(key),
-        count: countByDayKey.get(key) ?? 0,
-      })
-    }
-
-    const max = Math.max(
-      1,
-      ...days.map((d) => d.count),
+    return buildHistoryData(
+      events,
+      todayKey,
+      historyRange,
     )
-
-    const maxHeight = 72
-
-    const items = days.map((d) => ({
-      ...d,
-      height:
-        d.count === 0
-          ? 0
-          : Math.max(
-              10,
-              Math.round(
-                (d.count / max) * maxHeight,
-              ),
-            ),
-    }))
-
-    return { items }
   }, [historyRange, currentCleanStreak])
 
   /* ===================================================== */
