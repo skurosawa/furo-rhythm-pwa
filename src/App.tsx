@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   calcPoint,
   MAX_POINT,
-} from './lib/points'
+} from './domain/point'
 
 // 危険度ロジックはdomainへ移行
 import {
